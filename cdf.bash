@@ -1,4 +1,4 @@
-# cdf + fzf shell integration. Source from ~/.bashrc:
+# cdf + fzf shell integration. Source from ~/.bashrc (adjust the path to your clone):
 #   [ -f ~/tools/cdf/cdf.bash ] && . ~/tools/cdf/cdf.bash
 command -v fzf >/dev/null || return 0
 
