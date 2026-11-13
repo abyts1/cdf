@@ -8,18 +8,45 @@ multithreaded C scanner that walks the tree in parallel.
 
 ## Install
 
-Tested on Linux (Debian/Kali, WSL2) with bash. Needs `git`, `make`, a C
-compiler, and **fzf 0.48 or newer** (for `fzf --bash`).
+Needs bash, `git`, `make`, a C compiler, and **fzf 0.48 or newer** (for
+`fzf --bash`). Tested on Kali Linux under WSL2; the other distro commands below
+use each distro's standard package names.
 
 **1. Install the dependencies**
 
+| Distro | Command |
+|---|---|
+| Debian / Ubuntu / Kali / Mint / Pop!_OS | `sudo apt install git make gcc fzf` |
+| Fedora / RHEL / Rocky / Alma | `sudo dnf install git make gcc fzf` |
+| Arch / Manjaro / EndeavourOS | `sudo pacman -S --needed git make gcc fzf` |
+| openSUSE | `sudo zypper install git make gcc fzf` |
+| Alpine | `sudo apk add bash git make gcc musl-dev coreutils fzf` |
+| Void | `sudo xbps-install -S git make gcc fzf` |
+| Gentoo | `sudo emerge --ask dev-vcs/git app-shells/fzf` (make and gcc are already present) |
+| NixOS / Nix | `nix-shell -p git gnumake gcc fzf` (or add them to your config) |
+
+On RHEL, Rocky and Alma, fzf comes from EPEL: run `sudo dnf install epel-release`
+first. On Alpine, `coreutils` is needed because BusyBox's `realpath` lacks `-m`.
+
+Then check the fzf version:
+
 ```bash
-sudo apt install git make gcc fzf     # Debian / Ubuntu / Kali
-fzf --version                         # must be 0.48+
+fzf --version                # must be 0.48 or newer
 ```
 
-If your distro's fzf is older than 0.48, install it from
-[fzf's releases](https://github.com/junegunn/fzf/releases) instead.
+**If your fzf is older than 0.48** (common on Ubuntu 22.04/24.04, Debian 12 and
+other older LTS releases), install the current release from fzf's own repo and
+use it instead of the distro package:
+
+```bash
+sudo apt remove fzf           # or your distro's equivalent, so the old one isn't picked up
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install --bin          # downloads the binary into ~/.fzf/bin
+echo 'export PATH="$HOME/.fzf/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc && fzf --version
+```
+
+Put that `PATH` line **above** the `cdf.bash` line you add in step 4.
 
 **2. Clone the repo**
 
