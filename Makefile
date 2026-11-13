@@ -1,13 +1,13 @@
 PREFIX ?= $(HOME)/.local
 CFLAGS ?= -O2 -Wall -Wextra
 
-cdf-scan: cdf-scan.c
+fastjump-scan: fastjump-scan.c
 	$(CC) $(CFLAGS) -pthread -o $@ $<
 
-install: cdf-scan
-	install -Dm755 cdf-scan $(PREFIX)/bin/cdf-scan
+install: fastjump-scan
+	install -Dm755 fastjump-scan $(PREFIX)/bin/fastjump-scan
 
 clean:
-	rm -f cdf-scan
+	rm -f fastjump-scan
 
 .PHONY: install clean

@@ -1,4 +1,4 @@
-// cdf-scan: fast parallel directory lister for cdf.
+// fastjump-scan: fast parallel directory lister for fastjump.
 // Prints every directory under ROOT (excluding ROOT itself), one per line,
 // skipping pruned names. Does not follow symlinks. Output order is unspecified.
 //
@@ -192,7 +192,7 @@ static void *worker(void *arg) {
 
 int main(int argc, char **argv) {
     const char *root = argc > 1 ? argv[1] : getenv("HOME");
-    if (!root) { fprintf(stderr, "usage: cdf-scan [ROOT]\n"); return 2; }
+    if (!root) { fprintf(stderr, "usage: fastjump-scan [ROOT]\n"); return 2; }
 
     // Raise the soft fd limit to the hard limit; hold at most half of it.
     struct rlimit rl;
@@ -221,7 +221,7 @@ int main(int argc, char **argv) {
     work[work_len++] = r;
 
     long n = sysconf(_SC_NPROCESSORS_ONLN);
-    const char *env = getenv("CDF_SCAN_THREADS");
+    const char *env = getenv("FASTJUMP_SCAN_THREADS");
     if (env) n = atol(env);
     else if (n > 10) n = 10;  // fastest on a 32-core WSL2 box; more threads contend in the kernel
     if (n < 1) n = 1;
