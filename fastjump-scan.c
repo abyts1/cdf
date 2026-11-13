@@ -58,6 +58,13 @@ static int pruned(const char *n) {
     return 0;
 }
 
+// A newline or tab in a name would break the one-dir-per-line, tab-delimited
+// cache and frecency DB, so such directories (and their subtrees) are skipped.
+static int unlistable(const char *n) {
+    for (; *n; n++) if (*n == '\n' || *n == '\t') return 1;
+    return 0;
+}
+
 // Drop one reference; free the node (closing its fd) when it was the last,
 // and walk up to release the reference it held on its own parent.
 static void release(node *n) {
@@ -80,6 +87,14 @@ static void flush(outbuf *o) {
 }
 
 static void emit(outbuf *o, const char *s, size_t len) {
+    if (len + 1 > sizeof o->buf) {  // item larger than the whole buffer: write it straight out
+        flush(o);
+        pthread_mutex_lock(&out_mu);
+        fwrite(s, 1, len, stdout);
+        fputc('\n', stdout);
+        pthread_mutex_unlock(&out_mu);
+        return;
+    }
     if (o->n + len + 1 > sizeof o->buf) flush(o);
     memcpy(o->buf + o->n, s, len);
     o->buf[o->n + len] = '\n';
@@ -122,6 +137,7 @@ static node *scan_dir(node *n, outbuf *o, node ***kids, size_t *kcap) {
             off += e->d_reclen;
             const char *nm = e->d_name;
             if (nm[0] == '.' && (!nm[1] || (nm[1] == '.' && !nm[2]))) continue;
+            if (unlistable(nm)) continue;
             int isdir;
             if (e->d_type == DT_DIR) isdir = 1;
             else if (e->d_type == DT_UNKNOWN) {

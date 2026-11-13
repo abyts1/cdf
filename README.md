@@ -163,7 +163,9 @@ fastjump-scan [ROOT]     # default ROOT is $HOME
 
 Prints every directory under `ROOT` (not `ROOT` itself), one per line, in no
 particular order. Symlinks are not followed and unreadable directories are
-skipped silently. These names are pruned: `.git node_modules .cache .wine
+skipped silently. Directories whose name contains a tab or newline are also
+skipped (with their subtrees), since the tab-delimited, one-per-line cache and
+ranking DB can't represent them. These names are pruned: `.git node_modules .cache .wine
 __pycache__ .npm .cargo .rustup .local venv .venv` (keep in sync with
 `_FZF_PRUNE` in `fastjump.bash`).
 
