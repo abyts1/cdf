@@ -79,6 +79,18 @@ source ~/.bashrc
 If you already load fzf's key bindings elsewhere in `~/.bashrc` (for example
 `eval "$(fzf --bash)"`), remove that line. `cdf.bash` does it for you.
 
+**zsh:** load `cdf.zsh` instead (bash must still be installed, since it runs
+the functions in `cdf.bash`):
+
+```zsh
+echo '[ -f ~/tools/cdf/cdf.zsh ] && . ~/tools/cdf/cdf.zsh' >> ~/.zshrc
+source ~/.zshrc
+```
+
+`cdf.zsh` only defines `cdf`. It doesn't load fzf's key bindings, so keep (or
+add) `source <(fzf --zsh)` in `~/.zshrc`. `Alt-C` then uses fzf's own listing,
+not the cdf cache.
+
 **5. Check it works**
 
 ```bash
@@ -109,7 +121,7 @@ Then open a new terminal.
 ```bash
 rm -f ~/.local/bin/cdf-scan ~/.cache/cdf_dirs
 rm -rf ~/.local/share/cdf          # your frecency history
-# then delete the cdf.bash line from ~/.bashrc, and optionally ~/tools/cdf
+# then delete the cdf.bash line from ~/.bashrc (or cdf.zsh from ~/.zshrc), and optionally ~/tools/cdf
 ```
 
 ## Usage
@@ -122,7 +134,8 @@ rm -rf ~/.local/share/cdf          # your frecency history
 | `cdf --import-autojump` | Seed the ranking from autojump's history |
 | `Alt-C` | Pick a directory under the current one (uses the same cache) |
 
-`cdf.bash` also enables fzf's `Ctrl-R` (history) and `Ctrl-T` (files).
+`cdf.bash` also enables fzf's `Ctrl-R` (history) and `Ctrl-T` (files). In zsh,
+`Alt-C` and those keys come from fzf's own zsh bindings instead.
 
 ## Ranking
 
@@ -177,8 +190,8 @@ kernel. Results on other machines and filesystems will differ.
 
 - **A folder I just created doesn't show up.** The list refreshes in the
   background after each use. Run `cdf -r` to rescan immediately.
-- **`cdf: command not found`.** The `cdf.bash` line isn't in `~/.bashrc`, or
-  you haven't opened a new terminal since adding it.
+- **`cdf: command not found`.** The `cdf.bash` line isn't in `~/.bashrc` (or
+  `cdf.zsh` in `~/.zshrc`), or you haven't opened a new terminal since adding it.
 - **`Alt-C` does nothing (Windows Terminal).** The terminal is catching Alt.
   Press `Esc` then `c` instead.
 - **Without `cdf-scan`** on `PATH`, `cdf` still works but builds its list with
