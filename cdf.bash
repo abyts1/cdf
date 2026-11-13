@@ -13,16 +13,19 @@ export FZF_CTRL_T_COMMAND="find . $_FZF_PRUNE -o -type f -print 2>/dev/null | se
 export FZF_CTRL_T_OPTS="--preview 'head -100 {}'"
 export FZF_ALT_C_OPTS="--preview 'ls -A --color=always {} | head -50'"
 
-# Rebuild the directory cache atomically. Uses cdf-scan (parallel, ~4x faster)
-# when installed, otherwise find.
+# Rebuild the directory cache atomically. Uses cdf-scan (parallel, ~4x faster than find)
+# when installed, otherwise find. The list is sorted shortest-path-first so
+# that fzf's --tiebreak=index prefers shallower directories among equal matches.
 _cdf_scan() {
   local tmp="$_CDF_CACHE.tmp.$$"
   mkdir -p "${_CDF_CACHE%/*}"
-  if command -v cdf-scan >/dev/null; then
-    cdf-scan "$HOME" > "$tmp" 2>/dev/null
-  else
-    eval "find \"$HOME\" -mindepth 1 $_FZF_PRUNE -o -type d -print" > "$tmp" 2>/dev/null
-  fi
+  {
+    if command -v cdf-scan >/dev/null; then
+      cdf-scan "$HOME"
+    else
+      eval "find \"$HOME\" -mindepth 1 $_FZF_PRUNE -o -type d -print"
+    fi
+  } 2>/dev/null | LC_ALL=C awk '{ print length($0) "\t" $0 }' | LC_ALL=C sort -n -k1,1 | cut -f2- > "$tmp"
   mv -f "$tmp" "$_CDF_CACHE"
 }
 
@@ -39,13 +42,76 @@ _fzf_altc_list() {
 export _FZF_PRUNE _CDF_CACHE; export -f _fzf_altc_list _cdf_scan
 export FZF_ALT_C_COMMAND='_fzf_altc_list'
 
+# --- frecency ---------------------------------------------------------------
+# Every directory you pick with cdf is recorded as "path<TAB>count<TAB>last-epoch".
+# Rank = count weighted by recency (x4 within an hour, x2 within a day, x0.5
+# within a week, x0.25 older), the same scheme zoxide uses.
+_CDF_DB=${XDG_DATA_HOME:-$HOME/.local/share}/cdf/db
+
+# Record a visit. When the counts add up to more than 10000, every count is
+# scaled by 0.9 and entries that drop below 1 are forgotten, so old habits fade.
+_cdf_add() {
+  local tmp="$_CDF_DB.tmp.$$"
+  mkdir -p "${_CDF_DB%/*}"
+  [ -f "$_CDF_DB" ] || : > "$_CDF_DB"
+  awk -F'\t' -v OFS='\t' -v p="$1" -v now="$(date +%s)" '
+    $1 == p { hit = NR }
+    { path[NR] = $1; cnt[NR] = $2; last[NR] = $3; sum += $2 }
+    END {
+      f = sum + 1 > 10000 ? 0.9 : 1   # age the old counts first, then add this visit
+      for (i = 1; i <= NR; i++) {
+        c = cnt[i] * f
+        if (i == hit) { c += 1; last[i] = now }
+        if (c >= 1) print path[i], c, last[i]
+      }
+      if (!hit) print p, 1, now
+    }' "$_CDF_DB" 2>/dev/null > "$tmp" && mv -f "$tmp" "$_CDF_DB"
+}
+
+# Print directories under $1: frecent ones first (best first, only those that
+# still exist), then everything else from the cache.
+_cdf_list() {
+  local root="$1/" now d
+  printf -v now '%(%s)T' -1
+  if [ -s "$_CDF_DB" ]; then
+    awk -F'\t' -v r="$root" -v now="$now" 'index($1, r) == 1 {
+        a = now - $3
+        w = a < 3600 ? 4 : a < 86400 ? 2 : a < 604800 ? 0.5 : 0.25
+        print $2 * w "\t" $1 }' "$_CDF_DB" | sort -t $'\t' -k1,1gr | cut -f2- |
+      while IFS= read -r d; do [ -d "$d" ] && printf '%s\n' "$d"; done
+  fi
+  awk -v r="$root" -v db="$_CDF_DB" '
+    BEGIN { while ((getline l < db) > 0) { split(l, f, "\t"); seen[f[1]] } }
+    index($0, r) == 1 && !($0 in seen)' "$_CDF_CACHE"
+}
+
+# Seed the frecency DB from autojump (weights become counts, dated a week ago).
+_cdf_import_autojump() {
+  local src=${XDG_DATA_HOME:-$HOME/.local/share}/autojump/autojump.txt
+  [ -s "$src" ] || { echo "cdf: no autojump database at $src" >&2; return 1; }
+  mkdir -p "${_CDF_DB%/*}"
+  local then=$(( $(date +%s) - 604800 )) tmp="$_CDF_DB.tmp.$$"
+  awk -F'\t' -v OFS='\t' -v t="$then" -v db="$_CDF_DB" '
+    BEGIN { while ((getline l < db) > 0) { split(l, f, "\t"); have[f[1]] = l } }
+    !($2 in have) { c = int($1 / 10); have[$2] = $2 OFS (c < 1 ? 1 : c) OFS t; n++ }
+    END { for (k in have) print have[k]; print n + 0 > "/dev/stderr" }' "$src" 2>"$tmp.n" > "$tmp"
+  mv -f "$tmp" "$_CDF_DB"
+  echo "cdf: imported $(cat "$tmp.n") directories from autojump"; rm -f "$tmp.n"
+}
+
 # cdf [-r] [DIR]: fuzzy-pick a directory under DIR (default $HOME) and cd to it.
-# Reads the cache instantly and refreshes it in the background; -r rescans first.
+# Directories you pick often and recently are listed first. Reads the cache
+# instantly and refreshes it in the background; -r rescans first.
+# cdf --import-autojump: seed the ranking from your autojump history.
 cdf() {
   local d root
-  if [ "$1" = "-r" ]; then shift; _cdf_scan
-  elif [ ! -s "$_CDF_CACHE" ]; then _cdf_scan; fi
+  case "$1" in
+    --import-autojump) _cdf_import_autojump; return ;;
+    -r) shift; _cdf_scan ;;
+    *) [ -s "$_CDF_CACHE" ] || _cdf_scan ;;
+  esac
   root=$(realpath -m "${1:-$HOME}")
-  d=$(grep -F -- "$root/" "$_CDF_CACHE" | fzf --scheme=path --preview 'ls -A --color=always {}') && cd "$d"
+  d=$(_cdf_list "$root" | fzf --scheme=path --tiebreak=index --preview 'ls -A --color=always {}') &&
+    cd "$d" && ( _cdf_add "$d" & ) 2>/dev/null
   ( _cdf_scan & ) 2>/dev/null
 }

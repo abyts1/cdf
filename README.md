@@ -3,8 +3,9 @@
 Fuzzy `cd` to any directory under `$HOME`, using [fzf](https://github.com/junegunn/fzf).
 
 `cdf` opens instantly from a cached directory list and refreshes the cache in
-the background after every use. The cache is built by `cdf-scan`, a small
-multithreaded C scanner that walks the tree in parallel.
+the background after every use. Directories you pick often and recently are
+listed first ("frecency", like zoxide). The cache is built by `cdf-scan`, a
+small multithreaded C scanner.
 
 ## Install
 
@@ -86,6 +87,15 @@ cdf          # the first run builds the cache, then opens the picker
 
 Type part of a folder name and press Enter to jump there; press Esc to cancel.
 
+**6. (Optional) Bring over your autojump history**
+
+```bash
+cdf --import-autojump
+```
+
+This seeds the ranking with the directories autojump already knows, so `cdf`
+puts your usual places first from day one. Running it again only adds new ones.
+
 ### Updating
 
 ```bash
@@ -98,6 +108,7 @@ Then open a new terminal.
 
 ```bash
 rm -f ~/.local/bin/cdf-scan ~/.cache/cdf_dirs
+rm -rf ~/.local/share/cdf          # your frecency history
 # then delete the cdf.bash line from ~/.bashrc, and optionally ~/tools/cdf
 ```
 
@@ -108,9 +119,28 @@ rm -f ~/.local/bin/cdf-scan ~/.cache/cdf_dirs
 | `cdf` | Pick any directory under `~` and cd into it |
 | `cdf DIR` | Only show directories under `DIR` |
 | `cdf -r` | Rescan before opening (e.g. right after creating directories) |
+| `cdf --import-autojump` | Seed the ranking from autojump's history |
 | `Alt-C` | Pick a directory under the current one (uses the same cache) |
 
 `cdf.bash` also enables fzf's `Ctrl-R` (history) and `Ctrl-T` (files).
+
+## Ranking
+
+Every directory you jump to with `cdf` is recorded in
+`~/.local/share/cdf/db` (or `$XDG_DATA_HOME/cdf/db`) as
+`path<TAB>count<TAB>last-visit`. The list fzf sees is:
+
+1. Recorded directories that still exist, best score first. Score is the visit
+   count times a recency weight: x4 within an hour, x2 within a day, x0.5
+   within a week, x0.25 after that.
+2. Every other directory, shortest path first.
+
+fzf runs with `--tiebreak=index`, so among equally good matches the one higher
+in that list wins. A strong fuzzy match still beats a weak one. When the
+counts add up to more than 10000, all of them are scaled by 0.9 and entries
+below 1 are dropped, so directories you stop using fade out.
+
+Only picks made through `cdf` are recorded; plain `cd` and `Alt-C` are not.
 
 ## cdf-scan
 
@@ -124,12 +154,24 @@ skipped silently. These names are pruned: `.git node_modules .cache .wine
 __pycache__ .npm .cargo .rustup .local venv .venv` (keep in sync with
 `_FZF_PRUNE` in `cdf.bash`).
 
-Threads default to the CPU count, capped at 16; set `CDF_SCAN_THREADS` to
+Threads default to the CPU count, capped at 10; set `CDF_SCAN_THREADS` to
 override.
 
-Measured on ~60k directories (WSL2, warm cache, best of 5): `find` 0.188 s,
-`cdf-scan` 0.049 s at 16 threads. Single-threaded it is slower than `find`
-(0.384 s); the gain comes from parallelism.
+Each directory is opened with `openat()` relative to its parent's open file
+descriptor, so the kernel doesn't re-resolve the full path for every
+directory, and entries are read with raw `getdents64`. Output is identical to
+`find` with the same prunes.
+
+Measured on ~60k directories (32-core WSL2, warm cache, median of 15 runs):
+
+| | Time |
+|---|---|
+| `find` | ~175 ms |
+| `cdf-scan` v1 (full-path `open`, best at 16 threads) | 49.5 ms |
+| `cdf-scan` v2 (`openat`, 10 threads) | 40.5 ms |
+
+Past ~10 threads it gets slower and noisier as threads contend inside the
+kernel. Results on other machines and filesystems will differ.
 
 ## Troubleshooting
 
